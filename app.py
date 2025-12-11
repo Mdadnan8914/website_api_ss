@@ -114,28 +114,70 @@ async def take_screenshot(
     Take screenshot of a single page and return as bytes (binary)
     """
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
+        # Launch browser with realistic settings to avoid detection
+        browser = await p.chromium.launch(
+            headless=True,
+            args=['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+        )
+        
+        # Create context with realistic user agent and viewport
         context = await browser.new_context(
-            viewport={'width': viewport_width, 'height': viewport_height}
+            viewport={'width': viewport_width, 'height': viewport_height},
+            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            locale='en-US',
+            timezone_id='America/New_York'
         )
         page = await context.new_page()
         
         try:
-            # Navigate to page - use 'load' instead of 'networkidle' for better reliability
-            # 'load' waits for the load event, which is more reliable than networkidle
-            # for sites with continuous network activity (analytics, ads, etc.)
-            await page.goto(url, wait_until='load', timeout=timeout)
+            # Try multiple wait strategies as fallback
+            wait_strategies = ['load', 'domcontentloaded', 'commit']
+            last_error = None
             
-            # Wait additional time for dynamic content to render
-            await page.wait_for_timeout(wait_time)
+            for wait_strategy in wait_strategies:
+                try:
+                    # Navigate to page with current wait strategy
+                    response = await page.goto(url, wait_until=wait_strategy, timeout=timeout)
+                    
+                    # Check if page loaded successfully
+                    if response and response.status >= 400:
+                        raise Exception(f"Page returned status {response.status}: {response.status_text}")
+                    
+                    # Wait additional time for dynamic content to render
+                    await page.wait_for_timeout(wait_time)
+                    
+                    # Check if page shows an error (common error indicators)
+                    page_title = await page.title()
+                    page_url = page.url
+                    
+                    # Take screenshot
+                    screenshot_bytes = await page.screenshot(full_page=True)
+                    
+                    return screenshot_bytes
+                    
+                except Exception as e:
+                    last_error = e
+                    # If this isn't the last strategy, try the next one
+                    if wait_strategy != wait_strategies[-1]:
+                        print(f"Wait strategy '{wait_strategy}' failed, trying next...")
+                        continue
+                    else:
+                        # Last strategy failed, raise the error
+                        raise
             
-            # Take screenshot
-            screenshot_bytes = await page.screenshot(full_page=True)
-            
-            return screenshot_bytes
+            # If we get here, all strategies failed
+            raise last_error if last_error else Exception("All wait strategies failed")
         
         except Exception as e:
-            raise Exception(f"Error taking screenshot of {url}: {str(e)}")
+            # Provide more detailed error information
+            error_msg = str(e)
+            try:
+                current_url = page.url
+                page_title = await page.title()
+                error_msg += f" | Current URL: {current_url} | Page Title: {page_title}"
+            except:
+                pass
+            raise Exception(f"Error taking screenshot of {url}: {error_msg}")
         
         finally:
             await browser.close()
