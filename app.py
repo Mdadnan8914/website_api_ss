@@ -227,7 +227,7 @@ async def health_check():
 
 @app.get("/screenshot")
 async def screenshot_simple_get(
-    url: str = Query(..., description="Website URL to screenshot"),
+    url: Optional[str] = Query(None, description="Website URL to screenshot"),
     timeout: Optional[int] = Query(60000, description="Navigation timeout in milliseconds (default: 60000)")
 ):
     """
@@ -237,6 +237,12 @@ async def screenshot_simple_get(
     Usage: GET /screenshot?url=https://example.com
     Optional: GET /screenshot?url=https://example.com&timeout=90000
     """
+    if not url:
+        raise HTTPException(
+            status_code=422,
+            detail="Missing required parameter: 'url'. Usage: GET /screenshot?url=https://example.com"
+        )
+    
     try:
         screenshot_bytes = await take_screenshot(str(url), timeout=timeout)
         

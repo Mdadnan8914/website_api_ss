@@ -12,9 +12,17 @@ The API now has **simple endpoints** that return binary images ready for GPT mod
 1. Add **HTTP Request** node
 2. Set:
    - **Method:** GET
-   - **URL:** `https://your-app.onrender.com/screenshot?url={{$json.url}}`
+   - **URL:** `https://your-app.onrender.com/screenshot`
+   - **Specify Query Parameters:** ✅ Enable this option
+   - **Query Parameters:**
+     - **Name:** `url`
+     - **Value:** `{{ $json.page_url }}` (or `{{ $json.url }}` - use the field name from your previous node)
    - **Response Format:** File
    - **Binary Data:** true
+
+**Alternative (if you prefer URL in the URL field):**
+   - **URL:** `https://your-app.onrender.com/screenshot?url={{ encodeURIComponent($json.page_url) }}`
+   - **Specify Query Parameters:** ❌ Disable
 
 3. Connect to **GPT** node
    - The image will be automatically passed as binary
@@ -23,6 +31,11 @@ The API now has **simple endpoints** that return binary images ready for GPT mod
 ```
 https://your-app.onrender.com/screenshot?url=https://example.com
 ```
+
+**⚠️ Common Error (422):** If you get "422 Unprocessable Entity", it means the `url` parameter is missing. Make sure:
+- You're using `{{ $json.page_url }}` or `{{ $json.url }}` (match your data field name)
+- The field exists in your previous node's output
+- Query parameters are properly configured
 
 ## Option 2: Single Page Screenshot (POST)
 
