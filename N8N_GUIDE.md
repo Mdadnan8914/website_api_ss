@@ -76,6 +76,47 @@ https://your-app.onrender.com/screenshot?url=https://example.com
   → [GPT Vision Node]
 ```
 
+## Handling 503 Errors (Render Free Tier)
+
+**Problem:** Render's free tier spins down services after 15 minutes of inactivity. When you call the API, you may get a **503 error** while the service is waking up (takes 30-60 seconds).
+
+### Solution 1: Wake Up Service First (Recommended)
+
+Add a **health check** step before your screenshot request:
+
+```
+[Webhook/Trigger] 
+  → [HTTP Request: GET /health] (wake up service)
+  → [Wait: 2 seconds] (optional, give service time to fully start)
+  → [HTTP Request: GET /screenshot?url={{$json.url}}] 
+  → [GPT Vision Node]
+```
+
+**Health Check Node Settings:**
+- **Method:** GET
+- **URL:** `https://your-app.onrender.com/health`
+- **Response Format:** JSON
+- **Ignore SSL Issues:** false
+
+### Solution 2: Add Retry Logic
+
+In your HTTP Request node for screenshot:
+- **Options** → **Retry On Fail:** true
+- **Max Tries:** 3
+- **Retry Delay:** 5000ms (5 seconds)
+
+This will automatically retry if you get a 503 error.
+
+### Solution 3: Increase Timeout
+
+In your HTTP Request node:
+- **Options** → **Timeout:** 120000 (2 minutes)
+- This gives the service time to wake up and process the request
+
+### Solution 4: Use Render Paid Tier
+
+Upgrade to Render's paid tier ($7/month) to avoid spin-down issues.
+
 ## Key Points
 
 ✅ **No base64 conversion needed** - Images are returned as binary PNG  

@@ -201,13 +201,27 @@ async def take_screenshot_base64(
 async def root():
     return {
         "message": "Website Screenshot API",
+        "status": "running",
         "endpoints": {
+            "GET /health": "Health check endpoint (use to wake up service on Render)",
             "GET /screenshot?url=...": "Take screenshot (returns PNG binary) - SIMPLE FOR N8N",
             "POST /screenshot-binary": "Take screenshot (JSON body with url, returns PNG binary) - SIMPLE FOR N8N",
             "POST /screenshot": "Take screenshot (returns base64 JSON) - legacy",
             "POST /screenshot-all": "Take screenshots of all pages (returns base64 JSON) - legacy",
             "POST /screenshot-all-binary": "Take screenshots of all pages (returns ZIP file) - FOR N8N"
         }
+    }
+
+
+@app.get("/health")
+async def health_check():
+    """
+    Health check endpoint - use this to wake up the service on Render
+    Returns 200 OK when service is ready
+    """
+    return {
+        "status": "healthy",
+        "message": "Service is running and ready to take screenshots"
     }
 
 
