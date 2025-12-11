@@ -21,10 +21,12 @@ class ScreenshotRequest(BaseModel):
     viewport_width: Optional[int] = 1920
     viewport_height: Optional[int] = 1080
     max_pages: Optional[int] = 50  # Limit number of pages to prevent excessive crawling
+    timeout: Optional[int] = 60000  # Navigation timeout in milliseconds (default: 60000)
 
 
 class SimpleScreenshotRequest(BaseModel):
     url: HttpUrl
+    timeout: Optional[int] = 60000  # Navigation timeout in milliseconds (default: 60000)
 
 
 class ScreenshotResponse(BaseModel):
@@ -105,7 +107,8 @@ async def take_screenshot(
     url: str,
     wait_time: int = 3000,
     viewport_width: int = 1920,
-    viewport_height: int = 1080
+    viewport_height: int = 1080,
+    timeout: int = 60000
 ) -> bytes:
     """
     Take screenshot of a single page and return as bytes (binary)
@@ -118,10 +121,12 @@ async def take_screenshot(
         page = await context.new_page()
         
         try:
-            # Navigate to page
-            await page.goto(url, wait_until='networkidle', timeout=30000)
+            # Navigate to page - use 'load' instead of 'networkidle' for better reliability
+            # 'load' waits for the load event, which is more reliable than networkidle
+            # for sites with continuous network activity (analytics, ads, etc.)
+            await page.goto(url, wait_until='load', timeout=timeout)
             
-            # Wait additional time for dynamic content
+            # Wait additional time for dynamic content to render
             await page.wait_for_timeout(wait_time)
             
             # Take screenshot
@@ -140,12 +145,13 @@ async def take_screenshot_base64(
     url: str,
     wait_time: int = 3000,
     viewport_width: int = 1920,
-    viewport_height: int = 1080
+    viewport_height: int = 1080,
+    timeout: int = 60000
 ) -> str:
     """
     Take screenshot of a single page and return as base64 (for backward compatibility)
     """
-    screenshot_bytes = await take_screenshot(url, wait_time, viewport_width, viewport_height)
+    screenshot_bytes = await take_screenshot(url, wait_time, viewport_width, viewport_height, timeout)
     return base64.b64encode(screenshot_bytes).decode('utf-8')
 
 
@@ -164,15 +170,19 @@ async def root():
 
 
 @app.get("/screenshot")
-async def screenshot_simple_get(url: str = Query(..., description="Website URL to screenshot")):
+async def screenshot_simple_get(
+    url: str = Query(..., description="Website URL to screenshot"),
+    timeout: Optional[int] = Query(60000, description="Navigation timeout in milliseconds (default: 60000)")
+):
     """
     SIMPLE ENDPOINT FOR N8N: Just pass URL as query parameter
     Returns PNG image binary - ready to pass to GPT module
     
     Usage: GET /screenshot?url=https://example.com
+    Optional: GET /screenshot?url=https://example.com&timeout=90000
     """
     try:
-        screenshot_bytes = await take_screenshot(str(url))
+        screenshot_bytes = await take_screenshot(str(url), timeout=timeout)
         
         return Response(
             content=screenshot_bytes,
@@ -194,9 +204,10 @@ async def screenshot_simple_post(request: SimpleScreenshotRequest):
     
     Usage: POST /screenshot-binary
     Body: {"url": "https://example.com"}
+    Optional: {"url": "https://example.com", "timeout": 90000}
     """
     try:
-        screenshot_bytes = await take_screenshot(str(request.url))
+        screenshot_bytes = await take_screenshot(str(request.url), timeout=request.timeout)
         
         return Response(
             content=screenshot_bytes,
@@ -257,7 +268,8 @@ async def screenshot_all_pages(request: ScreenshotRequest):
                     url,
                     request.wait_time,
                     request.viewport_width,
-                    request.viewport_height
+                    request.viewport_height,
+                    request.timeout
                 )
                 
                 screenshots.append(ScreenshotResponse(
@@ -311,7 +323,8 @@ async def screenshot_all_pages_binary(request: ScreenshotRequest):
                         url,
                         request.wait_time,
                         request.viewport_width,
-                        request.viewport_height
+                        request.viewport_height,
+                        request.timeout
                     )
                     
                     # Create safe filename from URL
